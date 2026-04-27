@@ -6,9 +6,9 @@ Product Recommendation System — Streamlit GUI
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib
-matplotlib.use('Agg')
+import matplotlib          # line 9
+matplotlib.use('Agg')      # line 10  ← must come before pyplot
+import matplotlib.pyplot as plt  # line 11
 import seaborn as sns
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import svds
