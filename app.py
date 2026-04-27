@@ -1,14 +1,17 @@
 """
-Product Recommendation System — Streamlit GUI
-
+Product Recommendation System
+Streamlit-based interactive GUI for e-commerce product recommendations.
+Requirements: streamlit, pandas, numpy, scipy, scikit-learn, matplotlib, seaborn
+Usage: streamlit run app.py
+Data: Place interactions.csv and products.csv in the same folder.
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib          # line 9
-matplotlib.use('Agg')      # line 10  ← must come before pyplot
-import matplotlib.pyplot as plt  # line 11
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import svds
@@ -19,7 +22,7 @@ import time
 import warnings
 warnings.filterwarnings('ignore')
 
-# ─── Page config ──────────────────────────────────────────────────────────────
+# Page config
 st.set_page_config(
     page_title="Product Recommendation System",
     page_icon="🛍️",
@@ -27,7 +30,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ─── Custom CSS ───────────────────────────────────────────────────────────────
+# Custom CSS
 st.markdown("""
 <style>
     :root {
@@ -39,7 +42,7 @@ st.markdown("""
         --fs-base:   16px;
     }
 
-    /* Streamlit top-right run/stop buttons — make them visible and branded */
+    /* Style the top-right Streamlit toolbar buttons */
     [data-testid="stToolbar"] { visibility: visible !important; opacity: 1 !important; }
     [data-testid="stStatusWidget"] { visibility: visible !important; }
     header[data-testid="stHeader"] { background-color: #2E4057 !important; }
@@ -54,10 +57,10 @@ st.markdown("""
         background: #E76F51 !important;
     }
 
-    /* Base font size — driven by accessibility slider */
+    /* Base font size, controlled by the accessibility slider */
     body, .stMarkdown, .stText, label, p { font-size: var(--fs-base) !important; }
 
-    /* High contrast overrides (applied via .hc class on body) */
+    /* High contrast mode styles */
     body.hc { background: #000 !important; color: #fff !important; }
     body.hc .metric-card { background:#111 !important; border-color:#fff !important; color:#fff !important; }
     body.hc .metric-card .val { color:#fff !important; }
@@ -152,7 +155,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ─── Session state initialisation ─────────────────────────────────────────────
+# Session state initialisation
 def init_state():
     defaults = {
         'df_raw':          None,
@@ -163,8 +166,6 @@ def init_state():
         'pid_idx':         None,
         'pids':            None,
         'train_df':        None,
-        'test_df':         None,
-        'R_predicted':     None,
         'user_enc':        None,
         'item_enc':        None,
         'results':         None,
@@ -188,14 +189,14 @@ def init_state():
 
 init_state()
 
-# ─── Apply accessibility settings dynamically ─────────────────────────────────
+# Apply accessibility settings dynamically
 _fs  = st.session_state.get('font_size', 16)
 _hc  = st.session_state.get('high_contrast', False)
 _cb  = st.session_state.get('colorblind', False)
 st.markdown(f"""<style>
     :root {{ --fs-base: {_fs}px; }}
 
-    /* Font size — covers all Streamlit rendered elements */
+    /* Apply font size across all Streamlit elements */
     html, body, [class*="st-"], .stMarkdown, .stMarkdown p,
     .stMarkdown li, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
     label, p, span, div, input, textarea, select, button,
@@ -213,15 +214,14 @@ st.markdown(f"""<style>
     {'[data-testid="stSidebar"] * { color:#fff !important; }' if _hc else ''}
 </style>""", unsafe_allow_html=True)
 
-# ─── Colorblind palette ────────────────────────────────────────────────────────
+# Color palettes — standard and colorblind-safe (IBM palette)
 CB_PALETTE = ['#0072B2','#E69F00','#009E73','#F0E442','#CC79A7','#56B4E9','#D55E00']
-STD_PALETTE = ['#2E4057','#048A81','#E76F51','#EAF0F6','#54C6EB']
 
-# ─── Step navigation helper ───────────────────────────────────────────────────
+# Step navigation helper
 STEPS = ["📂 Load Data", "🔍 Explore", "🧹 Clean Data", "🤖 Run Model", "📊 Results"]
 
 def nav_buttons():
-    """Render Previous / Next buttons at the bottom of each section."""
+    # Previous and Next navigation buttons shown at the bottom of each step
     step = st.session_state.current_step
     col_prev, col_label, col_next = st.columns([1, 2, 1])
     with col_prev:
@@ -239,7 +239,7 @@ def nav_buttons():
                 st.rerun()
 
 
-# ─── Pipeline status bar ──────────────────────────────────────────────────────
+# Pipeline status bar
 def pipeline_bar():
     phases = [
         ('Load Data',  'status_obtain'),
@@ -268,10 +268,10 @@ def current_phase_index():
     return 4
 
 
-# ─── Sidebar ──────────────────────────────────────────────────────────────────
+# Sidebar
 with st.sidebar:
 
-    # ── Help & Accessibility at the TOP — always visible, no scroll needed ────
+    # Help & Accessibility at the TOP — always visible, no scroll needed
     with st.expander("❓ Help & Guidance", expanded=False):
         st.markdown("""
 **How to use this tool:**
@@ -304,7 +304,7 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # ── Navigation ────────────────────────────────────────────────────────────
+    # Navigation
     st.markdown("### Navigation")
     chosen = st.radio(
         "Jump to step",
@@ -319,7 +319,7 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # ── Pipeline Controls inside expander — keeps sidebar compact ─────────────
+    # Pipeline Controls inside expander — keeps sidebar compact
     with st.expander("⚙️ Pipeline Controls", expanded=False):
         alpha = st.slider(
             "Personalization strength",
@@ -346,7 +346,7 @@ with st.sidebar:
             st.session_state['run_full'] = True
 
 
-# ─── Main area ────────────────────────────────────────────────────────────────
+# Main area
 # Top-right run/stop hint
 # Top-right hint + title in same row
 st.markdown("""
@@ -368,9 +368,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 pipeline_bar()
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 1: DATA
-# ══════════════════════════════════════════════════════════════════════════════
+# --- Data ---
 if section == "📂 Load Data":
     st.markdown('<div class="section-header">📂 Load Data</div>', unsafe_allow_html=True)
 
@@ -457,9 +455,7 @@ if section == "📂 Load Data":
     nav_buttons()
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 2: EXPLORE
-# ══════════════════════════════════════════════════════════════════════════════
+# --- Explore ---
 elif section == "🔍 Explore":
     st.markdown('<div class="section-header">🔍 Explore Data</div>', unsafe_allow_html=True)
 
@@ -583,9 +579,7 @@ elif section == "🔍 Explore":
     nav_buttons()
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 3: CLEAN
-# ══════════════════════════════════════════════════════════════════════════════
+# --- Clean ---
 elif section == "🧹 Clean Data":
     st.markdown('<div class="section-header">🧹 Clean Data</div>', unsafe_allow_html=True)
 
@@ -707,9 +701,7 @@ elif section == "🧹 Clean Data":
     nav_buttons()
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 4: MODEL
-# ══════════════════════════════════════════════════════════════════════════════
+# --- Model ---
 elif section == "🤖 Run Model":
     st.markdown('<div class="section-header">🤖 Run Model</div>', unsafe_allow_html=True)
 
@@ -976,9 +968,7 @@ elif section == "🤖 Run Model":
     if st.session_state.results is None and st.session_state.df_clean is not None:
         nav_buttons()
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 5: REPORT
-# ══════════════════════════════════════════════════════════════════════════════
+# --- Report ---
 elif section == "📊 Results":
     st.markdown('<div class="section-header">📊 Results & Report</div>', unsafe_allow_html=True)
 
@@ -1085,7 +1075,7 @@ elif section == "📊 Results":
         st.markdown(f"{'✅' if done else '⬜'} **{label}** — {'Complete' if done else 'Not yet run'}")
 
 
-# ── Footer ────────────────────────────────────────────────────────────────────
+# Footer
 st.markdown(
     '<div class="footer">Product Recommendation System · Built with Streamlit</div>',
     unsafe_allow_html=True
